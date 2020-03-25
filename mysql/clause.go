@@ -60,6 +60,8 @@ func init()  {
 	generators[LIMIT] = _limit
 	generators[WHERE] = _where
 	generators[ORDERBY] = _orderBy
+	generators[UPDATE] = _update
+	generators[DELETE] = _delete
 }
 
 func _insert(values ...interface{}) (string, []interface{}) {
@@ -69,6 +71,14 @@ func _insert(values ...interface{}) (string, []interface{}) {
 	return fmt.Sprintf("INSERT INTO %s (%v)",tableName,fields),[]interface{}{}
 }
 
+
+func _update(values ...interface{}) (string, []interface{}) {
+	// UPDATE $tableName SET $field=?,... WHERE $condition=?            INTO $tablename ($fields)
+	tableName := values[0]
+	fields := strings.Join(values[1].([]string),"=?,")+ "=?"
+	values = values[2:]
+	return fmt.Sprintf("UPDATE `%s` SET %v",tableName,fields),values[0].([]interface{})
+}
 
 func genBindVars(num int) string {
 	var vars []string
@@ -119,3 +129,10 @@ func _where(values ...interface{}) (string, []interface{}) {
 func _orderBy(values ...interface{}) (string, []interface{}) {
 	return fmt.Sprintf("ORDER BY %s", values[0]), []interface{}{}
 }
+
+func _delete(values ...interface{}) (string, []interface{}) {
+	// WHERE $desc
+	tab := values[0]
+	return fmt.Sprintf("DELETE FROM `%s`", tab), []interface{}{}
+}
+

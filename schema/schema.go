@@ -31,6 +31,7 @@ type Schema struct {
 	ColumnNames []string
 	fieldMap map[string]*Field
 	Key string 			// 主键名称
+	FieldKey string 	// 字段主键
 }
 
 func (s *Schema) GetField(name string) *Field {
@@ -67,6 +68,7 @@ func Parse(modelType reflect.Type, d dialect.Dialect) *Schema {
 						field.IsAutoIncrement = true
 					}else if val == PRIMARY_KEY {
 						field.IsKey = true
+						schema.FieldKey = field.Name
 						schema.Key = field.Name
 					}else if val == NOT_NULL {
 						field.IsAutoIncrement  = true
@@ -79,8 +81,6 @@ func Parse(modelType reflect.Type, d dialect.Dialect) *Schema {
 						if field.IsKey {
 							schema.Key = field.Name
 						}
-					}else {
-
 					}
 				}
 			}

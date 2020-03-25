@@ -23,6 +23,12 @@ type Session interface {
 	Insert(model ...interface{}) bool
 	Find(model interface{}) error
 	Where(string,...interface{}) Session
+	First(model interface{}) error
+	OrderBy(string) Session
+	Limit(limit int) Session
+	Save(model interface{}) error
+	Update( interface{}, map[string]interface{}) error
+	Delete(model interface{}) error
 }
 
 

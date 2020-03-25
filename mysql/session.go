@@ -20,6 +20,7 @@ type MSession struct {
 	refMap map[string]*schema.Schema
 	dialect dialect.Dialect
 	clause Clause
+	tx *sql.Tx
 }
 
 func New(db *sql.DB, dialect dialect.Dialect) session.Session {
@@ -148,13 +149,6 @@ func (s *MSession) Insert(models ...interface{}) bool {
 
 
 func (s *MSession) Find(m interface{}) error {
-	ts := s.Model(m)
-	schema := s.RefTable(ts)
-	s.clause.Set(SELECT,schema.Name,schema.ColumnNames)
-	sql, vars := s.clause.Build(SELECT,WHERE,ORDERBY,LIMIT)
-	s.Raw(sql,vars...)
-	rows := s.Query()
-
 	// 获取m 的真实Value
 	indirect := reflect.Indirect(reflect.ValueOf(m))
 	// 获得m 的类型
@@ -162,6 +156,14 @@ func (s *MSession) Find(m interface{}) error {
 	if destType.Kind() != reflect.Slice {
 		return errors.New("params no slice.")
 	}
+
+	ts := s.Model(m)
+	schema := s.RefTable(ts)
+	s.clause.Set(SELECT,schema.Name,schema.ColumnNames)
+	sql, vars := s.clause.Build(SELECT,WHERE,ORDERBY,LIMIT)
+	s.Raw(sql,vars...)
+	rows := s.Query()
+
 	destType = destType.Elem()
 	for rows.Next() {
 		dest := reflect.New(destType).Elem()
@@ -181,6 +183,85 @@ func (s *MSession) Where(sql string,vars ...interface{}) session.Session {
 	s.clause.Set(WHERE,sql,vars)
 	s.clause.Build(WHERE)
 	return s
+}
+
+func (s *MSession) First(model interface{}) error {
+	ts := s.Model(model)
+	schema := s.RefTable(ts)
+	s.clause.Set(SELECT,schema.Name,schema.ColumnNames)
+	s.Limit(1)
+	sql, vars := s.clause.Build(SELECT,WHERE,ORDERBY,LIMIT)
+	s.Raw(sql,vars...)
+	rows := s.Query()
+
+	if rows.Next() {
+		dest := reflect.ValueOf(model).Elem()
+		var values []interface{}
+		for _,name := range schema.FieldNames {
+			values = append(values, dest.FieldByName(name).Addr().Interface())
+		}
+		if err := rows.Scan(values...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *MSession) OrderBy(s2 string) session.Session {
+	s.clause.Set(ORDERBY,s2)
+	s.clause.Build(ORDERBY)
+	return s
+}
+
+func (s *MSession) Limit(limit int) session.Session {
+	s.clause.Set(LIMIT,limit)
+	s.clause.Build(LIMIT)
+	return s
+}
+
+func (s *MSession) Save(model interface{}) error {
+	ts := s.Model(model)
+	schema := s.RefTable(ts)
+
+	indirect := reflect.Indirect(reflect.ValueOf(model))
+	var vars []interface{}
+	keyVal := indirect.FieldByName(schema.FieldKey).Interface()
+	for i:=0; i<indirect.NumField();i++ {
+		vars = append(vars,indirect.Field(i).Interface())
+	}
+	s.clause.Set(UPDATE,schema.Name,schema.ColumnNames,vars)
+	s.Where(fmt.Sprintf("%s=?",schema.Key),keyVal)
+	sql, vars := s.clause.Build(UPDATE,WHERE)
+	s.Raw(sql,vars...).Exec()
+	return nil
+}
+
+func (s *MSession) Update(model interface{},pmap map[string]interface{}) error {
+	ts := s.Model(model)
+	schema := s.RefTable(ts)
+	var cols []string
+	var vars []interface{}
+	for k,v := range pmap {
+		cols = append(cols,k)
+		vars = append(vars,v)
+	}
+	s.clause.Set(UPDATE,schema.Name,cols,vars)
+
+	keyVal := reflect.Indirect(reflect.ValueOf(model)).FieldByName(schema.FieldKey).Interface()
+	s.Where(fmt.Sprintf("%s=?",schema.Key),keyVal)
+	sql, vars := s.clause.Build(UPDATE,WHERE)
+	s.Raw(sql,vars...).Exec()
+	return nil
+}
+
+func (s *MSession) Delete(model interface{}) error {
+	ts := s.Model(model)
+	schema := s.RefTable(ts)
+	s.clause.Set(DELETE,schema.Name)
+	s.Where(fmt.Sprintf("%s=?",schema.Key),reflect.Indirect(reflect.ValueOf(model)).FieldByName(schema.FieldKey).Interface())
+	sql, vars := s.clause.Build(DELETE, WHERE)
+	s.Raw(sql,vars...).Exec()
+	return nil
 }
 
 
